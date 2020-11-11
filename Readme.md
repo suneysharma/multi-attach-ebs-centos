@@ -52,24 +52,27 @@ Before setting up the cluster software, run “yum update” on both the nodes. 
 *<sub>Figure 6: /etc/hosts files and hostnames </sub>*
 
 Install cluster software using the yum command on both nodes:
-> sudo yum install pacemaker pcs -y
-
+```bash
+sudo yum install pacemaker pcs -y
+```
 You will be using pcs to configure your cluster.  To start and enable the pcsd daemon run the following on both nodes:
-
-> sudo systemctl start pcsd.service
-> sudo systemctl enable pcsd.service
+```bash
+sudo systemctl start pcsd.service
+sudo systemctl enable pcsd.service
+```
 
 The cluster software creates a user hacluster which will be used to configure the cluster. The hacluster user will be used by the cluster to perform cluster tasks like syncing the configuration and starting and stopping services on cluster nodes. To get started, the password for hacluster needs to be set on both the nodes and has to be same. To set the password for the hacluster user run the following commands on both the nodes:
-
-> sudo passwd hacluster
-
+```bash
+sudo passwd hacluster
+```
 ### Configuring the cluster:
 
 With the required software installed, you can proceed to configuring the cluster. 
 Use pcs cluster command on any node to authenticate using the hacluster user: (Enter username as hacluster and when prompted, enter the password from the previous step)
 
-> sudo pcs cluster auth ma-host-1 ma-host-2  
-
+```bash
+sudo pcs cluster auth ma-host-1 ma-host-2  
+```
 If your cluster nodes are able to communicate with each other using their registered hostnames you should see an output like the one below:
 
 ![Figure 7](images/pcs_cluster_auth.png)
@@ -78,7 +81,9 @@ If your cluster nodes are able to communicate with each other using their regist
 If the command fails to complete, please see if the instances are able to resolve each other’s hostname properly and also if the security group configuration [allows traffic between instances belonging to the same security group](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/security-group-rules-reference.html#sg-rules-other-instances).  
 Next, configure a name for the cluster and add the two nodes as its members using the command below(run on any one node)
 
-> sudo pcs cluster setup --name macluster ma-host-1 ma-host-2
+```bash
+sudo pcs cluster setup --name macluster ma-host-1 ma-host-2
+```
 
 If the command is successful then you should see an output like this:
 ![Figure 8](images/pcs_cluster_setup.png)
@@ -86,15 +91,18 @@ If the command is successful then you should see an output like this:
 
 Once the cluster has been setup successfully, you can start the cluster using the pcs cluster start command:
 
-> sudo pcs cluster start --all
-
+```bash
+sudo pcs cluster start --all
+```
 ![Figure 9](images/pcs_cluster_start_all.png)
 *<sub>Figure 9: Starting the cluster </sub>*
 
 
 The status of the cluster can be checked using the following commands:
-> sudo pcs status corosync  
-> sudo pcs status
+```bash
+sudo pcs status corosync  
+sudo pcs status
+```
 
 ![Figure 10](images/ClusterStatus_before_fencing_resourcegroups.png)
 *<sub>Figure 10: Displaying Cluster status </sub>*
@@ -103,11 +111,15 @@ Setting up fencing: The next step is to set up a fencing device for the cluster.
 
 Install the fence agent on the nodes on both the nodes:
 
-> sudo yum install fence-agents-aws.x86_64 -y
+```bash
+sudo yum install fence-agents-aws.x86_64 -y
+```
 
 Once the agent is successfully installed, it should be visible in the output of the following command:
 
-> sudo pcs stonith list
+```bash
+sudo pcs stonith list
+```
 
 ![Figure 11](images/pcs_stonith_list.png)
 *<sub>Figure 11: Displaying aws fence device </sub>*
@@ -115,12 +127,14 @@ Once the agent is successfully installed, it should be visible in the output of 
 The fence_aws agent needs the credentials of an IAM user with privileges to describe, start, reboot and stop the two EC2 instances. If you don’t have one already, [create an IAM user](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_users_create.html) with the required privileges. You will need the user credentials(Access Key and Secret Key) in the next step. 
 
 To configure the fencing agent, use the “pcs stonith create” command on one of the hosts:
-> sudo pcs stonith create clusterfence fence_aws \
+```bash
+sudo pcs stonith create clusterfence fence_aws \
 access_key="your access key" \
 secret_key="your secret key" \
 region=us-west-2 \
 pcmk_host_map="ma-host-1:Instance-ID-1;ma-host2:Instance-ID-2" \
 power_timeout=240 pcmk_reboot_timeout=480 pcmk_reboot_retries=4 
+```
 
 
 ![Figure 12](images/create_fence_Device.png)
@@ -130,48 +144,64 @@ power_timeout=240 pcmk_reboot_timeout=480 pcmk_reboot_retries=4
 After completing the cluster configuration, you need to setup GFS2. To begin, you need the gfs2-utils package for gfs2 and the utilities required to manage the gfs2 file system. Also since you will be using LVM to create volumes on the disk, you will need the lvm2-cluster package which has the cluster extension for LVM tools.
 
 To install run the following on both the nodes:
-> sudo yum install gfs2-utils.x86_64 lvm2-cluster.x86_64 -y
+```bash
+sudo yum install gfs2-utils.x86_64 lvm2-cluster.x86_64 -y
+```
 
 Before proceeding with the next step, create the mountpoint /sharedFS on both nodes.
-> sudo mkdir /sharedFS
+```bash 
+sudo mkdir /sharedFS
+```
 
 The default cluster behaviour is to stop a node that has lost quorum. However for GFS2 it is a best practice to change it to “freeze” IO  till quorum is retained. To make the change run the following on any of the nodes:
 
-> sudo pcs property set no-quorum-policy=freeze
+```bash
+sudo pcs property set no-quorum-policy=freeze
+```
 
 ![Figure 13](images/no_quorum_policy_freeze.png)
 *<sub>Figure 13: Setting the noquorum policy to freeze </sub>*
 
 Setup the dlm(Distributed Lock Manager) resource by running the following on any node:
 
-> sudo pcs resource create dlm ocf:pacemaker:controld op monitor interval=30s 
- on-fail=fence clone interleave=true ordered=true
+```bash
+sudo pcs resource create dlm ocf:pacemaker:controld op monitor interval=30s on-fail=fence clone interleave=true ordered=true
+```
 
 
 The following command needs to be executed on both the nodes to enable clustered locking:
 
-> sudo /sbin/lvmconf --enable-cluster
+```bash
+sudo /sbin/lvmconf --enable-cluster
+```
 
 Clvmd is the clustered LVM daemon which is responsible for distributing LVM metadata updates across the cluster. The following command needs to be executed on any node to create clvmd as a cluster resource:
 
-> sudo pcs resource create clvmd ocf:heartbeat:clvm op monitor interval=30s 
+```bash
+sudo pcs resource create clvmd ocf:heartbeat:clvm op monitor interval=30s 
 on-fail=fence clone interleave=true ordered=true
+```
 
 Also, clvmd needs to start after dlm and the clvmd resource needs to be on the same node as the dlm resource. The following set of commands(run on any node) defines the constraints:
 
-> sudo pcs constraint order start dlm-clone then clvmd-clone
-> sudo pcs constraint colocation add clvmd-clone with dlm-clone
+```bash
+sudo pcs constraint order start dlm-clone then clvmd-clone
+sudo pcs constraint colocation add clvmd-clone with dlm-clone
+```
 
 Create the volume group and the logical volume using the following commands on any of the nodes(Replace /dev/nvme1n1 with the device name visible for the Multi-Attach enabled EBS volume in your setup)
 
-> sudo pvcreate /dev/nvme1n1  
-> sudo vgcreate -Ay -cy clustervg /dev/nvme1n1  
-> sudo lvcreate -L99G -n clusterlv clustervg
+```bash
+sudo pvcreate /dev/nvme1n1  
+sudo vgcreate -Ay -cy clustervg /dev/nvme1n1  
+sudo lvcreate -L99G -n clusterlv clustervg
+```
 
 Next step is to create the GFS2 filesystem on the volume created above. Run the following command on any of the nodes to create a GFS2 filesystem.
 
-> sudo mkfs.gfs2 -j2 -p lock_dlm -t macluster:sharedFS /dev/clustervg/clusterlv
-
+```bash
+sudo mkfs.gfs2 -j2 -p lock_dlm -t macluster:sharedFS /dev/clustervg/clusterlv
+```
 It is important to specify the correct values after the -t switch. The correct format is **cluster_name:FSName** which is **macluster:sharedFS** in our setup. 
 
 ![Figure 14](images/mkfs.gfs2.png)
@@ -183,14 +213,18 @@ Some points to note before you proceed to mount the GFS2 filesystem:
 
 Create a filesystem resource by running the following command on any node:
 
-> sudo pcs resource create clusterfs Filesystem device="/dev/clustervg/clusterlv" 
+```bash
+sudo pcs resource create clusterfs Filesystem device="/dev/clustervg/clusterlv" 
 directory="/sharedFS" fstype="gfs2" options="noatime" op monitor interval=10s 
 on-fail=fence clone interleave=true
+```
 
 Finally, for setting up the GFS2 and clvmd dependency and startup order use the following commands:
 
-> sudo pcs constraint order start clvmd-clone then clusterfs-clone
-> sudo pcs constraint colocation add clusterfs-clone with clvmd-clone
+```bash
+sudo pcs constraint order start clvmd-clone then clusterfs-clone
+sudo pcs constraint colocation add clusterfs-clone with clvmd-clone
+```
 
 The above commands will mount the newly created GFS2 file system on both nodes.
 
