@@ -32,7 +32,7 @@ Once the volume has been created successfully, you need to attach it to both the
 
 Select the hosts that you wish to attach the volume to. In this case it is ma-host-1 and ma-host-2.
 
-![Figure 4](images/AttachVolume2.jpg)
+![Figure 4](images/AttachVolume2.jpg)  
 *<sub>Figure 4: Selecting the Hosts </sub>*
 
 Once you have attached the EBS volume to both the nodes, run the ‘lsblk’ command to confirm that the EBS volume is now visible on both the hosts:
